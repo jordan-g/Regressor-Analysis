@@ -57,27 +57,26 @@ def get_bout_data(bout_fname, calcium_fps, n_frames, tail_calcium_offset=0):
 
     bouts = {}
 
-    print(tail_calcium_offset)
+    if bout_fname is not None:
+        with open(bout_fname, newline='') as f:
+            # extract lines from CSV file
+            reader = csv.reader(f, delimiter=",")
+            lines = [line.split(',') for line in f if line.strip()]
 
-    with open(bout_fname, newline='') as f:
-        # extract lines from CSV file
-        reader = csv.reader(f, delimiter=",")
-        lines = [line.split(',') for line in f if line.strip()]
+            for i in range(len(lines)):
+                line = lines[i]
 
-        for i in range(len(lines)):
-            line = lines[i]
-
-            # skip the first line (assuming it's a header row)
-            if i > 0 and len(line) > 0:
-                bout_name = line[0]
-                if bout_name not in bouts.keys():
-                    bouts[bout_name] = []
-                
-                bout_window = [float(line[1]), float(line[2])]
-                start_frame = max(0, int(round(bout_window[0]*calcium_fps)) - tail_calcium_offset)
-                end_frame   = min(n_frames-1, int(round(bout_window[1]*calcium_fps)) - tail_calcium_offset)
-                
-                bouts[bout_name].append([start_frame, end_frame])
+                # skip the first line (assuming it's a header row)
+                if i > 0 and len(line) > 0:
+                    bout_name = line[0]
+                    if bout_name not in bouts.keys():
+                        bouts[bout_name] = []
+                    
+                    bout_window = [float(line[1]), float(line[2])]
+                    start_frame = max(0, int(round(bout_window[0]*calcium_fps)) - tail_calcium_offset)
+                    end_frame   = min(n_frames-1, int(round(bout_window[1]*calcium_fps)) - tail_calcium_offset)
+                    
+                    bouts[bout_name].append([start_frame, end_frame])
 
     return bouts
 
@@ -88,25 +87,69 @@ def get_stimuli_data(frame_timestamp_fname, calcium_fps, n_frames, tail_calcium_
         with open(frame_timestamp_fname, 'r') as f:
             data = f.readlines()
 
-            for i in data[1:]:
-                items = data[i].split(',')
+            # print(data)
 
-                time        = items[0]
-                stim_num    = items[1]
+            for i in range(1, len(data)):
+                items = data[i].rstrip().split(',')
+
+                # print(items)
+
+                time        = float(items[0])
+                stim_num    = int(items[1])
                 stim_name   = items[2]
-                stim_type   = items[4]
-                stim_params = items[5:]
+                stim_type   = items[3]
+                stim_params = items[4].split('; ')
 
-                if stim_type not in stimuli.keys():
-                    stimuli[stim_type] = {'time': [time]}
+                # print(stim_params)
 
-                    if stim_type == 'looming_dot':
-                        stimuli[stim_type]['radius'] = [stim_params[0]]
-                else:
-                    stimuli[stim_type]['time'].append(time)
 
-                    if stim_type == 'looming_dot':
-                        stimuli[stim_type]['radius'].append(stim_params[0])
+                # covert time to calcium frame
+                time = int(time*calcium_fps/1000.0) + tail_calcium_offset
+
+                if 0 <= time < n_frames and stim_type in ['Delay', 'White Flash', 'Black Flash', 'Looming Dot', 'Moving Dot', 'Combined Dots', 'Grating', 'Optomotor Grating', 'Broadband Grating']:
+                    if stim_type not in stimuli.keys():
+                        stimuli[stim_type] = {'time': [time]}
+
+                        if stim_type == 'Looming Dot':
+                            radius = float(stim_params[0].split('radius: ')[1])
+                            stimuli[stim_type]['radius'] = [radius]
+                        elif stim_type == 'Moving Dot':
+                            x = float(stim_params[0].split('x: ')[1])
+                            y = float(stim_params[1].split('y: ')[1])
+                            stimuli[stim_type]['x'] = [x]
+                            stimuli[stim_type]['y'] = [y]
+                        elif stim_type == 'Combined Dots':
+                            radius = float(stim_params[0].split('looming dot radius: ')[1])
+                            x = float(stim_params[0].split('moving dot x: ')[1])
+                            y = float(stim_params[1].split('moving dot y: ')[1])
+                            stimuli[stim_type]['radius'] = [radius]
+                            stimuli[stim_type]['x'] = [x]
+                            stimuli[stim_type]['y'] = [y]
+                        elif stim_type in ['Grating', 'Optomotor Grating', 'Broadband Grating']:
+                            phase = float(stim_params[0].split('phase: ')[1])
+                            stimuli[stim_type]['phase'] = [phase]
+                    else:
+                        if time not in stimuli[stim_type]['time']:
+                            stimuli[stim_type]['time'].append(time)
+
+                            if stim_type == 'Looming Dot':
+                                radius = float(stim_params[0].split('radius: ')[1])
+                                stimuli[stim_type]['radius'].append(radius)
+                            elif stim_type == 'Moving Dot':
+                                x = float(stim_params[0].split('x: ')[1])
+                                y = float(stim_params[1].split('y: ')[1])
+                                stimuli[stim_type]['x'].append(x)
+                                stimuli[stim_type]['y'].append(y)
+                            elif stim_type == 'Combined Dots':
+                                radius = float(stim_params[0].split('looming dot radius: ')[1])
+                                x = float(stim_params[0].split('moving dot x: ')[1])
+                                y = float(stim_params[1].split('moving dot y: ')[1])
+                                stimuli[stim_type]['radius'].append(radius)
+                                stimuli[stim_type]['x'].append(x)
+                                stimuli[stim_type]['y'].append(y)
+                            elif stim_type in ['Grating', 'Optomotor Grating', 'Broadband Grating']:
+                                phase = float(stim_params[0].split('phase: ')[1])
+                                stimuli[stim_type]['phase'].append(phase)
 
     return stimuli
 
@@ -261,33 +304,82 @@ def create_regressors(bouts, stimuli, calcium_fps, n_frames):
 
     for stim_type in stimuli.keys():
         regressor = np.zeros(n_frames).astype(int)
+        regressor[stimuli[stim_type]['time']] = 1
 
-    behavior_start_frame, behavior_end_frame = get_behavior_start_end(bouts)
+        regressors[stim_type] = convolve_gcamp6f(regressor, calcium_fps)
 
-    # create a behavior start regressor
-    regressor = np.zeros(n_frames).astype(int)
-    regressor[behavior_start_frame] = 1
-    regressors["Behavior Start"] = convolve_gcamp6f(regressor, calcium_fps)
+        if stim_type in ['Looming Dot', 'Combined Dots']:
+            regressor = np.zeros(n_frames)
 
-    # create a behavior end regressor
-    regressor = np.zeros(n_frames).astype(int)
-    regressor[behavior_end_frame] = 1
-    regressors["Behavior End"] = convolve_gcamp6f(regressor, calcium_fps)
+            for i in range(len(stimuli[stim_type]['time'])):
+                time = stimuli[stim_type]['time'][i]
+                radius = stimuli[stim_type]['radius'][i]
 
-    # create a behavior regressor
-    regressor = np.zeros(n_frames).astype(int)
-    regressor[behavior_start_frame:behavior_end_frame] = 1
-    regressors["Behavior"] = convolve_gcamp6f(regressor, calcium_fps)
+                regressor[time] = radius
+            regressor -= np.amin(regressor)
+            regressor /= min(100, np.amax(regressor))
 
-    # create a pre-behavior regressor
-    regressor = np.zeros(n_frames).astype(int)
-    regressor[:behavior_start_frame] = 1
-    regressors["Pre-Behavior"] = convolve_gcamp6f(regressor, calcium_fps)
+            regressors['Looming Dot Radius'] = convolve_gcamp6f(regressor, calcium_fps)
+        if stim_type in ['Moving Dot', 'Combined Dots']:
+            regressor_x = np.zeros(n_frames)
+            regressor_y = np.zeros(n_frames)
 
-    # create a post-behavior regressor
-    regressor = np.zeros(n_frames).astype(int)
-    regressor[behavior_end_frame:] = 1
-    regressors["Post-Behavior"] = convolve_gcamp6f(regressor, calcium_fps)
+            for i in range(len(stimuli[stim_type]['time'])):
+                time = stimuli[stim_type]['time'][i]
+                x    = stimuli[stim_type]['x'][i]
+                y    = stimuli[stim_type]['y'][i]
+
+                regressor_x[time] = x
+                regressor_y[time] = y
+            regressor_x -= np.amin(regressor_x)
+            regressor_x /= np.amax(regressor_x)
+            regressor_y -= np.amin(regressor_y)
+            regressor_y /= np.amax(regressor_y)
+
+            regressors['Moving Dot X'] = convolve_gcamp6f(regressor_x, calcium_fps)
+            regressors['Moving Dot Y'] = convolve_gcamp6f(regressor_y, calcium_fps)
+        if stim_type in ['Grating', 'Optomotor Grating', 'Broadband Grating']:
+            regressor = np.zeros(n_frames)
+
+            for i in range(len(stimuli[stim_type]['time'])):
+                time  = stimuli[stim_type]['time'][i]
+                phase = stimuli[stim_type]['phase'][i]
+
+                regressor[time] = phase
+            regressor -= np.amin(regressor)
+            regressor /= np.amax(regressor)
+            regressor *= 2
+            regressor -= 1
+
+            regressors['Grating Phase'] = convolve_gcamp6f(regressor, calcium_fps)
+
+    if len(bouts.keys()) > 0:
+        behavior_start_frame, behavior_end_frame = get_behavior_start_end(bouts)
+
+        # create a behavior start regressor
+        regressor = np.zeros(n_frames).astype(int)
+        regressor[behavior_start_frame] = 1
+        regressors["Behavior Start"] = convolve_gcamp6f(regressor, calcium_fps)
+
+        # create a behavior end regressor
+        regressor = np.zeros(n_frames).astype(int)
+        regressor[behavior_end_frame] = 1
+        regressors["Behavior End"] = convolve_gcamp6f(regressor, calcium_fps)
+
+        # create a behavior regressor
+        regressor = np.zeros(n_frames).astype(int)
+        regressor[behavior_start_frame:behavior_end_frame] = 1
+        regressors["Behavior"] = convolve_gcamp6f(regressor, calcium_fps)
+
+        # create a pre-behavior regressor
+        regressor = np.zeros(n_frames).astype(int)
+        regressor[:behavior_start_frame] = 1
+        regressors["Pre-Behavior"] = convolve_gcamp6f(regressor, calcium_fps)
+
+        # create a post-behavior regressor
+        regressor = np.zeros(n_frames).astype(int)
+        regressor[behavior_end_frame:] = 1
+        regressors["Post-Behavior"] = convolve_gcamp6f(regressor, calcium_fps)
 
     # create a recording start regressor
     regressor = np.zeros(n_frames).astype(int)
@@ -321,6 +413,7 @@ def multilinear_regression(regressors, temporal_footprints):
 
     regression_coefficients = [ np.zeros((temporal_footprints[z].shape[0], len(regressor_names))) for z in range(len(temporal_footprints)) ]
     regression_intercepts   = [ np.zeros((temporal_footprints[z].shape[0], 1)) for z in range(len(temporal_footprints)) ]
+    regression_scores       = [ np.zeros((temporal_footprints[z].shape[0], len(regressor_names))) for z in range(len(temporal_footprints)) ]
 
     for z in range(len(temporal_footprints)):
         for i in range(temporal_footprints[z].shape[0]):
@@ -329,8 +422,9 @@ def multilinear_regression(regressors, temporal_footprints):
 
             regression_coefficients[z][i] = clf.coef_
             regression_intercepts[z][i]   = clf.intercept_
+            regression_scores[z][i]       = clf.score(X, temporal_footprints[z][i])
 
-    return regression_coefficients, regression_intercepts
+    return regression_coefficients, regression_intercepts, regression_scores
 
 def get_correlation_colors(correlation_results, cmap=cm.RdBu):
     correlation_colors = [ np.zeros((correlation_results[z].shape[0], correlation_results[z].shape[1], 4)) for z in range(len(correlation_results)) ]
@@ -391,11 +485,11 @@ def regressor_analysis(calcium_video_fname, roi_data_fname, bout_fname, frame_ti
 
     regressors = create_regressors(bouts, stimuli, calcium_fps, n_frames)
 
-    regression_coefficients, regression_intercepts = multilinear_regression(regressors, temporal_footprints)
+    regression_coefficients, regression_intercepts, regression_scores = multilinear_regression(regressors, temporal_footprints)
 
     correlation_results = get_correlations(regressors, temporal_footprints)
 
-    return correlation_results, regression_coefficients, regression_intercepts, regressors, spatial_footprints, temporal_footprints, calcium_video, mean_images, n_frames, roi_centers
+    return correlation_results, regression_coefficients, regression_intercepts, regression_scores, regressors, spatial_footprints, temporal_footprints, calcium_video, mean_images, n_frames, roi_centers
 
 def plot_regressor_analysis(correlation_results, regression_coefficients, regression_intercepts, regressors, spatial_footprints, temporal_footprints, calcium_video, mean_images, n_frames, roi_centers, fig=None):
     regressor_names = list(regressors.keys())
@@ -536,6 +630,158 @@ def plot_regressor_analysis(correlation_results, regression_coefficients, regres
     z_slider.on_changed(update_correlations_plot)
     regressor_slider.on_changed(update_correlations_plot)
     max_p_slider.on_changed(update_correlations_plot)
+
+    if not existing_figure:
+        plt.show()
+
+def plot_correlation(correlation_results, regressors, spatial_footprints, temporal_footprints, calcium_video, mean_images, n_frames, roi_centers, z, max_p, regressor_index, fig=None):
+    regressor_names = list(regressors.keys())
+
+    cmap = get_cmap(len(regressor_names)+1)
+
+    correlation_colors = get_correlation_colors(correlation_results)
+    
+    # plot results
+
+    if fig is None:
+        existing_figure = False
+
+        fig = plt.figure(0, figsize=(8, 16))
+    else:
+        existing_figure = True
+
+        plt.figure(0)
+
+    main_plot_axis   = plt.axes([0.01, 0.5, 0.9, 0.45])
+    main_plot_axis.axes.get_xaxis().set_visible(False)
+    main_plot_axis.axes.get_yaxis().set_visible(False)
+    plt.axis('off')
+
+    most_correlated_roi_plot_axis = plt.axes([0.01, 0.4, 0.9, 0.05])
+    most_correlated_roi_plot_axis.axes.get_xaxis().set_visible(False)
+    most_correlated_roi_plot_axis.axes.get_yaxis().set_visible(False)
+    plt.axis('off')
+
+    regressor_axis = plt.axes([0.01, 0.3, 0.9, 0.05])
+    regressor_axis.axes.get_xaxis().set_visible(False)
+    regressor_axis.axes.get_yaxis().set_visible(False)
+    plt.axis('off')
+
+    traces_plot_axis = plt.axes([0.01, 0.15, 0.9, 0.1])
+    traces_plot_axis.axes.get_xaxis().set_visible(False)
+    traces_plot_axis.axes.get_yaxis().set_visible(False)
+    plt.axis('off')
+
+    # plt.subplots_adjust(bottom=0.25)
+
+    plt.sca(main_plot_axis)
+
+    im = plt.imshow(mean_images[z], cmap='gray')
+
+    # filter ROIs based on p-value
+    indices = filter_correlation_results(correlation_results, z=0, regressor=0, max_p=max_p)
+
+    scatter = plt.scatter(roi_centers[z][indices, 0], roi_centers[z][indices, 1], s=80*fig.dpi/72, c=correlation_colors[z][indices, regressor_index, :], edgecolors=None, linewidths=0)
+
+    plt.sca(most_correlated_roi_plot_axis)
+    i = np.argmax(np.abs(correlation_results[z][indices, 0, 0]))
+    c = 'r' if correlation_results[z][indices[i], 0, 0] > 0 else 'b'
+    most_correlated, = plt.plot(temporal_footprints[z][indices[i]], 'r')
+    plt.xlim(0, n_frames-1)
+
+    plt.sca(regressor_axis)
+    bout_array = np.zeros((1, regressors[regressor_names[regressor_index]].shape[0], 4))
+    bout_array[:, :] = cmap(0)
+    bout_array[:, :, -1] = regressors[regressor_names[regressor_index]]
+    # bout = plt.imshow(bout_array, aspect='auto')
+    bout, = plt.plot(regressors[regressor_names[regressor_index]], c=cmap(0))
+    plt.xlim(0, n_frames-1)
+
+    plt.sca(traces_plot_axis)
+
+    traces = plt.imshow(temporal_footprints[z], aspect='auto', cmap='plasma')
+
+    axcolor = 'lightgoldenrodyellow'
+
+    regressor_axis.set_title("Regressor:")
+    most_correlated_roi_plot_axis.set_title("Most correlated ROI trace:")
+    traces_plot_axis.set_title("All ROI traces:")
+    main_plot_axis.set_title(regressor_names[regressor_index])
+
+    if not existing_figure:
+        plt.show()
+
+def plot_multilinear_regression(regression_coefficients, regression_intercepts, regression_scores, regressors, spatial_footprints, temporal_footprints, calcium_video, mean_images, n_frames, roi_centers, z, fig=None):
+    regressor_names = list(regressors.keys())
+
+    cmap = get_cmap(len(regressor_names)+1)
+
+    top_regressor_colors = get_top_regressor_colors(regression_coefficients, regression_intercepts, cmap)
+    
+    # plot results
+
+    if fig is None:
+        existing_figure = False
+
+        fig = plt.figure(0, figsize=(8, 16))
+    else:
+        existing_figure = True
+
+        plt.figure(0)
+        plt.clf()
+
+    main_plot_axis   = plt.axes([0.01, 0.5, 0.9, 0.45])
+    main_plot_axis.axes.get_xaxis().set_visible(False)
+    main_plot_axis.axes.get_yaxis().set_visible(False)
+    plt.axis('off')
+
+    best_fit_roi_axis = plt.axes([0.01, 0.4, 0.9, 0.05])
+    best_fit_roi_axis.axes.get_xaxis().set_visible(False)
+    best_fit_roi_axis.axes.get_yaxis().set_visible(False)
+    plt.axis('off')
+
+    worst_fit_roi_axis = plt.axes([0.01, 0.3, 0.9, 0.05])
+    worst_fit_roi_axis.axes.get_xaxis().set_visible(False)
+    worst_fit_roi_axis.axes.get_yaxis().set_visible(False)
+    plt.axis('off')
+
+    plt.sca(main_plot_axis)
+
+    im_2 = plt.imshow(mean_images[z], cmap='gray')
+
+    scatter_2 = plt.scatter(roi_centers[z][:, 0], roi_centers[z][:, 1], s=80*fig.dpi/72, c=top_regressor_colors[z], edgecolors=None, linewidths=0)
+
+    patches = []
+    for i in range(len(regressor_names)):
+        patches.append(mpatches.Patch(color=cmap(i), label=regressor_names[i]))
+
+    plt.legend(handles=patches, fontsize='small', ncol=5)
+
+    plt.sca(best_fit_roi_axis)
+    i = np.argmax(regression_scores[z][:, 0])
+    best_fit_roi, = plt.plot(temporal_footprints[z][i], 'r', label='ROI Trace')
+
+    regressor_array = np.array([ regressors[key] for key in regressors.keys() ])
+
+    fit = np.dot(regression_coefficients[z][i, :], regressor_array) + regression_intercepts[z][i, 0]
+    best_fit, = plt.plot(fit, 'b', label='Fit')
+    plt.xlim(0, n_frames-1)
+
+    plt.legend()
+
+    plt.sca(worst_fit_roi_axis)
+    i = np.argmin(regression_scores[z][:, 0])
+    worst_fit_roi, = plt.plot(temporal_footprints[z][i], 'r', label='ROI Trace')
+
+    regressor_array = np.array([ regressors[key] for key in regressors.keys() ])
+
+    fit = np.dot(regression_coefficients[z][i, :], regressor_array) + regression_intercepts[z][i, 0]
+    worst_fit, = plt.plot(fit, 'b', label='Fit')
+    plt.xlim(0, n_frames-1)
+
+    main_plot_axis.set_title("Top Regressor")
+    best_fit_roi_axis.set_title("Best fit:")
+    worst_fit_roi_axis.set_title("Worst fit:")
 
     if not existing_figure:
         plt.show()
