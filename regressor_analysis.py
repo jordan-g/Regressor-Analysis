@@ -679,15 +679,17 @@ def plot_correlation(correlation_results, regressors, spatial_footprints, tempor
     im = plt.imshow(mean_images[z], cmap='gray')
 
     # filter ROIs based on p-value
-    indices = filter_correlation_results(correlation_results, z=0, regressor=0, max_p=max_p)
+    indices = filter_correlation_results(correlation_results, z=z, regressor=regressor_index, max_p=max_p)
 
-    scatter = plt.scatter(roi_centers[z][indices, 0], roi_centers[z][indices, 1], s=80*fig.dpi/72, c=correlation_colors[z][indices, regressor_index, :], edgecolors=None, linewidths=0)
+    if len(indices) > 0:
+        scatter = plt.scatter(roi_centers[z][indices, 0], roi_centers[z][indices, 1], s=80*fig.dpi/72, c=correlation_colors[z][indices, regressor_index, :], edgecolors=None, linewidths=0)
 
-    plt.sca(most_correlated_roi_plot_axis)
-    i = np.argmax(np.abs(correlation_results[z][indices, 0, 0]))
-    c = 'r' if correlation_results[z][indices[i], 0, 0] > 0 else 'b'
-    most_correlated, = plt.plot(temporal_footprints[z][indices[i]], 'r')
-    plt.xlim(0, n_frames-1)
+        plt.sca(most_correlated_roi_plot_axis)
+        i = np.argmax(np.abs(correlation_results[z][indices, regressor_index, 0]))
+
+        c = 'r' if correlation_results[z][indices[i], regressor_index, 0] > 0 else 'b'
+        most_correlated, = plt.plot(temporal_footprints[z][indices[i]], c)
+        plt.xlim(0, n_frames-1)
 
     plt.sca(regressor_axis)
     bout_array = np.zeros((1, regressors[regressor_names[regressor_index]].shape[0], 4))
