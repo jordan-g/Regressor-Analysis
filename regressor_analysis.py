@@ -491,6 +491,18 @@ def regressor_analysis(calcium_video_fname, roi_data_fname, bout_fname, frame_ti
 
     return correlation_results, regression_coefficients, regression_intercepts, regression_scores, regressors, spatial_footprints, temporal_footprints, calcium_video, mean_images, n_frames, roi_centers
 
+def save_data(correlation_results, regressors):
+	for i in range(len(correlation_results)):
+		# print('correlation results type is', type(correlation_results[i]))
+		print('The value is ')
+		print('length of correlation results is', len(correlation_results[i]))
+		# print('The first value of the correlation results is ', correlation_results[i][0])
+		if i == 2:
+			np.save('correlation_test.npy', correlation_results[i])
+		print(correlation_results.shape)
+
+	# print(correlation_results)
+
 def plot_regressor_analysis(correlation_results, regression_coefficients, regression_intercepts, regressors, spatial_footprints, temporal_footprints, calcium_video, mean_images, n_frames, roi_centers, fig=None):
     regressor_names = list(regressors.keys())
 

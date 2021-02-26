@@ -216,7 +216,7 @@ class PlotWindow(QMainWindow):
         self.export_data_button = QPushButton("Export Data...")
         self.export_data_button.setFixedWidth(120)
         self.export_data_button.clicked.connect(self.export_data)
-        self.export_data_button.setEnabled(False)
+        self.export_data_button.setEnabled(True)
         layout.addWidget(self.export_data_button)
 
         self.calcium_video_fnames   = []
@@ -227,7 +227,8 @@ class PlotWindow(QMainWindow):
         self.show()
 
     def export_data(self):
-        pass
+        save_data(self.correlation_results, self.regressors)
+        # print('replication of clever test')
 
     def reset_variables(self):
         self.selected_video      = 0
